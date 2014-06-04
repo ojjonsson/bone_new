@@ -122,7 +122,7 @@ per_pll_lock_loop:
 	ANDS	R1,#CM_WKUP_CM_IDLEST_DPLL_PER_ST_DPLL_CLK
 	BEQ		per_pll_lock_loop
 		
-	BX	LR
+	BX		LR
 
 	
 	
