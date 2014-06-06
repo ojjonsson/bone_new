@@ -53,8 +53,33 @@
 	.set	CM_WKUP_UART0_CLKCTRL_IDLEST_FUNC,0x0
 	.set	CM_WKUP_UART0_CLKCTRL_IDLEST_SHIFT,0x00000010
 	.set	CM_WKUP_UART0_CLKCTRL_IDLEST,0x00030000
+	
+	
+	.set	SOC_CONTROL_REGS,0x44E10000
+/*
+	CONTROL_CONF_UART_RXD(0)
+	CONTROL_CONF_UART_TXD(0)
+*/
+	.set	CONTROL_CONF_UART0_RXD,0x970
+	.set	CONTROL_CONF_UART0_TXD,0x974
+	.set	CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_PUTYPESEL,0x00000010
+	.set	CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_RXACTIVE,0x00000020
+	.set	CONTROL_CONF_UART0_TXD_CONF_UART0_TXD_PUTYPESEL,0x00000010
 
 
+	.set	SOC_UART_0_REGS,0x44E09000
+	.set	BAUD_RATE_115200,115200
+	.set	UART_REG_CONFIG_MODE_B,0x00BF
+	.set	UART_LCR_CHAR_LENGTH_8BIT,0x3
+    .set	UART_LCR_NB_STOP_1BIT,0x0
+    .set	UART_LCR_NB_STOP_SHIFT,0x00000002
+    .set	UART_LCR_BREAK_EN_NORMAL,0x0
+    .set	UART_LCR_BREAK_EN_SHIFT,0x00000006
+    .set	UART_MDR1_MODE_SELECT_UART16X,0x0u
+	
+	.set	UART_SYSC,0x54
+	.set	UART_SYSC,0x58
+	.set	UART_SYSC_SOFTRESET,0x00000002
 
 
 	.global 	uart_setup
@@ -89,9 +114,9 @@ uart_stdio_init:
 	/* platform/beaglebone/uart.c:UART0ModuleClkConfig */
 	BL		uart0_module_clk_config
 	/* platform/beaglebone/uart.c:UARTPinMuxSetup(0) */
-/*	BL		uart0_pin_mux_setup*/
+	BL		uart0_pin_mux_setup
 	/* platform/beaglebone/uartConsole.c:UARTStdioInitExpClk(BAUD_RATE_115200, 1, 1) */
-/*	BL		uart_stdio_init_exp_clk*/
+	BL		uart_stdio_init_exp_clk
 	
 	BX		LR
 	
@@ -422,4 +447,149 @@ loop_21:
 	BX		LR
 
 
+
+
+uart0_pin_mux_setup:
+          /* RXD */
+/*          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_RXD(0)) = 
+          (CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_PUTYPESEL | 
+           CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_RXACTIVE);*/
+	LDR		R0,=SOC_CONTROL_REGS
+	LDR		R1,[R0,#CONTROL_CONF_UART0_RXD]
+	ORR		R1,#(CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_PUTYPESEL | CONTROL_CONF_UART0_RXD_CONF_UART0_RXD_RXACTIVE)
+	STR		R1,[R0,#CONTROL_CONF_UART0_RXD]
+
+          /* TXD */
+/*          HWREG(SOC_CONTROL_REGS + CONTROL_CONF_UART_TXD(0)) = 
+           CONTROL_CONF_UART0_TXD_CONF_UART0_TXD_PUTYPESEL;*/
+	LDR		R1,[R0,#CONTROL_CONF_UART0_TXD]
+	ORR		R1,#CONTROL_CONF_UART0_TXD_CONF_UART0_TXD_PUTYPESEL
+	STR		R1,[R0,#CONTROL_CONF_UART0_TXD]
+	
+	BX		LR
+
+
+
+uart_stdio_init_exp_clk:
+    /* Performing a module reset. */
+    /*
+    #define SOC_UART_0_REGS                      (0x44E09000)
+    #define UART_CONSOLE_BASE                    (SOC_UART_0_REGS)
+    */
+/*    UARTModuleReset(UART_CONSOLE_BASE);*/
+	BL		uart_module_reset
+
+    /* Performing FIFO configurations. */
+/*    platform/beaglebone/uartConsole.c:UartFIFOConfigure(txTrigLevel, rxTrigLevel); // both levels set to 1 */
+	BL		uart_fifo_configure
+
+    /* Performing Baud Rate settings. */
+    /* #define BAUD_RATE_115200                     (115200) */
+/*    platform/beaglebone/uartConsole.c:UartBaudRateSet(baudRate); // baudRate is BAUD_RATE_115200*/
+	BL		uart_baudrate_set
+
+    /* Switching to Configuration Mode B. */
+    /* #define UART_REG_CONFIG_MODE_B              (0x00BF) */
+/*    UARTRegConfigModeEnable(UART_CONSOLE_BASE, UART_REG_CONFIG_MODE_B);*/
+	BL		uart_reg_config_mode_enable
+
+    /* Programming the Line Characteristics. */
+    /*
+    #define UART_LCR_CHAR_LENGTH_8BIT   (0x3u)
+    #define UART_FRAME_WORD_LENGTH_8            (UART_LCR_CHAR_LENGTH_8BIT)
+    
+    #define UART_LCR_NB_STOP_1BIT   (0x0u)
+    #define UART_LCR_NB_STOP_SHIFT   (0x00000002u)
+    #define UART_FRAME_NUM_STB_1                (UART_LCR_NB_STOP_1BIT << UART_LCR_NB_STOP_SHIFT)
+    
+    */
+/*    UARTLineCharacConfig(UART_CONSOLE_BASE,
+                         (UART_FRAME_WORD_LENGTH_8 | UART_FRAME_NUM_STB_1),
+                         UART_PARITY_NONE);*/
+	BL		uart_line_char_config
+
+    /* Disabling write access to Divisor Latches. */
+/*    UARTDivisorLatchDisable(UART_CONSOLE_BASE);*/
+	BL		uart_divisor_latch_disable
+
+    /* Disabling Break Control. */
+    /*
+    #define UART_LCR_BREAK_EN_NORMAL   (0x0u)
+    #define UART_LCR_BREAK_EN_SHIFT   (0x00000006u)
+    #define UART_BREAK_COND_DISABLE             (UART_LCR_BREAK_EN_NORMAL << UART_LCR_BREAK_EN_SHIFT)
+    */
+/*    UARTBreakCtl(UART_CONSOLE_BASE, UART_BREAK_COND_DISABLE);*/
+	BL		uart_break_ctl
+
+    /* Switching to UART16x operating mode. */
+    /*
+    #define UART_MDR1_MODE_SELECT_UART16X   (0x0u)
+    #define UART16x_OPER_MODE                   (UART_MDR1_MODE_SELECT_UART16X)
+    */
+/*    UARTOperatingModeSelect(UART_CONSOLE_BASE, UART16x_OPER_MODE);*/
+	BL		uart_operating_mode_select
+
+
+	BX		LR
+
+	
+uart_module_reset:
+    /* Performing Software Reset of the module. */
+    /*
+    #define UART_SYSC   (0x54)
+    #define UART_SYSC   (0x58)
+    #define UART_SYSC_SOFTRESET   (0x00000002u)
+    */
+/*    HWREG(baseAdd + UART_SYSC) |= (UART_SYSC_SOFTRESET);*/
+	LDR		R0,=SOC_UART_0_REGS
+	LDR		R1,[R0,#UART_SYSC]
+	ORR		R1,#UART_SYSC_SOFTRESET
+	STR		R1,[R0,#UART_SYSC]
+
+    /* Wait until the process of Module Reset is complete. */
+    while(!(HWREG(baseAdd + UART_SYSS) & UART_SYSS_RESETDONE));
+module_reset_done_loop:
+	LDR		R1,[R0,#UART_SYSS]
+	CMP		R1,#UART_SYSS_RESETDONE
+	BEQ		module_reset_done_loop
+
+	BX		LR
+	
+	
+	
+uart_fifo_configure:
+/*
+    unsigned int fifoConfig = 0;
+*/
+    /* Setting the TX and RX FIFO Trigger levels as 1. No DMA enabled. */
+/*
+#define UART_FIFO_CONFIG(txGra, rxGra, txTrig, rxTrig, txClr, rxClr, dmaEnPath, dmaMode) \
+                        ((unsigned int) \
+                         (((txGra & 0xF) << 26) | \
+                          ((rxGra & 0xF) << 22) | \
+                          ((txTrig & 0xFF) << 14) | \
+                          ((rxTrig & 0xFF) << 6) | \
+                          ((txClr & 0x1) << 5) | \
+                          ((rxClr & 0x1) << 4) | \
+                          ((dmaEnPath & 0x1) << 3) | \
+                          (dmaMode & 0x7)))
+
+*/
+/*    fifoConfig = UART_FIFO_CONFIG(UART_TRIG_LVL_GRANULARITY_1,
+                                  UART_TRIG_LVL_GRANULARITY_1,
+                                  txTrigLevel,
+                                  rxTrigLevel,
+                                  1,
+                                  1,
+                                  UART_DMA_EN_PATH_SCR,
+                                  UART_DMA_MODE_0_ENABLE);
+*/
+    /* Configuring the FIFO settings. */
+/*    UARTFIFOConfig(UART_CONSOLE_BASE, fifoConfig);*/
+
+
+	BX		LR
+	
+	
+	
 	.end
